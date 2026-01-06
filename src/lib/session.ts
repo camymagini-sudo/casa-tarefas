@@ -2,21 +2,31 @@ import { supabase } from "./supabase";
 
 export async function getMeAndHousehold() {
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado");
+  if (!auth.user) {
+    throw new Error("Usuário não autenticado");
+  }
 
-  const myId = auth.user.id;
+  const userId = auth.user.id;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, display_name")
-    .eq("id", myId)
+    .eq("id", userId)
     .single();
+
+  if (!profile) {
+    throw new Error("Perfil não encontrado");
+  }
 
   const { data: member } = await supabase
     .from("household_members")
     .select("household_id")
-    .eq("user_id", myId)
+    .eq("user_id", userId)
     .single();
+
+  if (!member) {
+    throw new Error("Usuário não associado a uma casa");
+  }
 
   return {
     id: profile.id,
