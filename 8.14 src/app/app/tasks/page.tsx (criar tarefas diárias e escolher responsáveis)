@@ -1,0 +1,130 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { getHouseMembers, getMeAndHousehold } from "@/lib/session";
+
+type Task = {
+  id: string;
+  title: string;
+  description: string | null;
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
+  is_active: boolean;
+  sort_order: number;
+  task_assignees: { assignee_id: string }[];
+};
+
+export default function TasksPage() {
+  const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [frequency, setFrequency] = useState<"DAILY"|"WEEKLY"|"MONTHLY">("DAILY");
+  const [assignees, setAssignees] = useState<string[]>([]);
+
+  async function load() {
+    setMsg(null);
+    const me = await getMeAndHousehold();
+    setHouseholdId(me.household_id);
+    setMembers(await getHouseMembers(me.household_id));
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id,title,description,frequency,is_active,sort_order, task_assignees(assignee_id)")
+      .eq("household_id", me.household_id)
+      .order("sort_order", { ascending: true });
+
+    if (error) setMsg(error.message);
+    setTasks((data as any) ?? []);
+  }
+
+  async function addTask() {
+    if (!householdId) return;
+    const clean = title.trim();
+    if (!clean) return setMsg("Título obrigatório.");
+
+    const { data: created, error } = await supabase
+      .from("tasks")
+      .insert({ household_id: householdId, title: clean, frequency, is_active: true, sort_order: tasks.length })
+      .select("id")
+      .single();
+
+    if (error) return setMsg(error.message);
+
+    if (assignees.length) {
+      const { error: aErr } = await supabase.from("task_assignees").insert(
+        assignees.map((assignee_id) => ({ task_id: created!.id, assignee_id }))
+      );
+      if (aErr) return setMsg(aErr.message);
+    }
+
+    setTitle("");
+    setFrequency("DAILY");
+    setAssignees([]);
+    await load();
+  }
+
+  useEffect(() => { load().catch((e) => setMsg(e.message)); }, []);
+
+  return (
+    <main style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
+      <h1>Tarefas</h1>
+      {msg && <p style={{ color: "crimson" }}>{msg}</p>}
+
+      <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+        <h2>Nova tarefa</h2>
+
+        <label>Título</label>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", padding: 10 }} />
+
+        <div style={{ height: 10 }} />
+
+        <label>Frequência</label>
+        <select value={frequency} onChange={(e) => setFrequency(e.target.value as any)} style={{ width: "100%", padding: 10 }}>
+          <option value="DAILY">Diária</option>
+          <option value="WEEKLY">Semanal</option>
+          <option value="MONTHLY">Mensal</option>
+        </select>
+
+        <div style={{ height: 10 }} />
+
+        <label>Responsáveis</label>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6 }}>
+          {members.map((m) => (
+            <label key={m.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={assignees.includes(m.id)}
+                onChange={(e) => {
+                  if (e.target.checked) setAssignees([...assignees, m.id]);
+                  else setAssignees(assignees.filter((x) => x !== m.id));
+                }}
+              />
+              {m.name}
+            </label>
+          ))}
+        </div>
+
+        <div style={{ height: 12 }} />
+        <button onClick={addTask} style={{ padding: 12 }}>Criar</button>
+      </div>
+
+      <h2 style={{ marginTop: 18 }}>Lista</h2>
+      <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}>
+        {tasks.map((t) => (
+          <li key={t.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <strong>{t.title}</strong>
+              <span>{t.frequency}</span>
+            </div>
+            <div style={{ opacity: 0.75, marginTop: 6 }}>
+              Responsáveis: {(t.task_assignees ?? []).length ? `${(t.task_assignees ?? []).length}` : "0"}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
