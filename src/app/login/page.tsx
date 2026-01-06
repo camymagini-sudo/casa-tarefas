@@ -1,22 +1,52 @@
-"use client";
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+'use client'
+
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  async function signIn() {
-    await supabase.auth.signInWithPassword({ email, password });
-    window.location.href = "/app/today";
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: 'https://casa-tarefas.vercel.app/app'
+      }
+    })
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSent(true)
+    }
   }
 
   return (
-    <main style={{ padding: 16 }}>
+    <main style={{ padding: 24 }}>
       <h1>Login</h1>
-      <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <button onClick={signIn}>Entrar</button>
+
+      {sent ? (
+        <p>Te enviamos um link por email ✉️</p>
+      ) : (
+        <form onSubmit={handleLogin}>
+          <input
+            type="email"
+            placeholder="Seu email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+          />
+          <br /><br />
+          <button type="submit">Entrar</button>
+        </form>
+      )}
+
+      {error && <p style={{ color: 'red' }}>{error}</p>}
     </main>
-  );
+  )
 }
